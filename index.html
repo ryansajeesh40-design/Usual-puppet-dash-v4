@@ -1,0 +1,133 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>UsualPuppetDash</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Inter:wght@300;400;600&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #030303;
+            font-family: 'Inter', sans-serif;
+            color: #fff;
+        }
+        .font-orbitron {
+            font-family: 'Orbitron', sans-serif;
+        }
+        .font-mono {
+            font-family: 'JetBrains Mono', monospace;
+        }
+        
+        /* Custom scrollbar */
+        ::-webkit-scrollbar {
+            width: 4px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(0,0,0,0.2);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(255,255,255,0.1);
+            border-radius: 10px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(255,255,255,0.2);
+        }
+
+        /* Animations */
+        @keyframes progress {
+            0% { width: 0%; left: 0; }
+            50% { width: 80%; left: 10%; }
+            100% { width: 100%; left: 0; }
+        }
+
+        @keyframes float {
+            0% { transform: translateY(0px); }
+            50% { transform: translateY(-10px); }
+            100% { transform: translateY(0px); }
+        }
+
+        @keyframes scanline {
+            0% { transform: translateY(-100%); }
+            100% { transform: translateY(100%); }
+        }
+
+        @keyframes data-stream {
+            0% { transform: translateY(-100%); opacity: 0; }
+            10% { opacity: 0.5; }
+            90% { opacity: 0.5; }
+            100% { transform: translateY(100%); opacity: 0; }
+        }
+
+        @keyframes rotate-slow {
+            from { trans'form: rotate(0deg); }
+            to { transfor'm: rotate(360deg); }
+        }
+
+        @keyframes rotate-fast {
+            from { transform: rotate(360deg); }
+            to { transform: rotate(0deg); }
+        }
+
+        @keyframes glitch {
+            0% { clip-path: inset(80% 0 0 0); transform: translate(-5px, -5px); }
+            10% { clip-path: inset(10% 0 80% 0); transform: translate(5px, 5px); }
+            20% { clip-path: inset(80% 0 0 0); transform: translate(-5px, -5px); }
+            100% { clip-path: inset(80% 0 0 0); transform: translate(-5px, -5px); }
+        }
+
+        .animate-float {
+            animation: float 4s ease-in-out infinite;
+        }
+
+        .animate-rotate-slow {
+            animation: rotate-slow 12s linear infinite;
+        }
+
+        .animate-rotate-fast {
+            animation: rotate-fast 8s linear infinite;
+        }
+
+        .animate-data-stream {
+            animation: data-stream 2s linear infinite;
+        }
+
+        .glitch-text {
+            animation: glitch 1s linear infinite;
+        }
+
+        .glass {
+            background: rgba(255, 255, 255, 0.03);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        .drop-shadow-glow {
+            filter: drop-shadow(0 0 15px currentColor);
+        }
+
+        .neural-bg {
+            background-image: radial-gradient(circle at 2px 2px, rgba(255,255,255,0.05) 1px, transparent 0);
+            background-size: 40px 40px;
+        }
+    </style>
+<script type="importmap">
+{
+  "imports": {
+    "react": "https://esm.sh/react@^19.2.3",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
+    "react/": "https://esm.sh/react@^19.2.3/",
+    "@google/genai": "https://esm.sh/@google/genai@^1.34.0"
+  }
+}
+</script>
+</head>
+<body>
+    <div id="root" class="neural-bg min-h-screen"></div>
+</body>
+</html>
