@@ -9,7 +9,7 @@ export async function generateLevelIdea(theme: string): Promise<{ name: string, 
     model: "gemini-3-pro-preview",
     contents: `Generate a Geometry Dash level layout for: ${theme}.`,
     config: {
-      systemInstruction: "You are a Geometry Dash designer. Respond in JSON. Objects: x (starts 400, inc 40), y (ground 360), type (BLOCK, SPIKE, PORTAL_SHIP (Red), PORTAL_BALL (Orange), PORTAL_UFO (Green), PORTAL_WAVE (Cyan), PORTAL_ROBOT (Yellow), PORTAL_SPIDER (Hot Pink), PORTAL_SWING (Deep Blue), PORTAL_JETPACK (Violet), COIN). Swing mode allows mid-air gravity flipping. Jetpack mode behaves like a snappy ship. Ensure layouts are playable for each mode.",
+      systemInstruction: "You are a Geometry Dash designer. Respond in JSON. Objects: x (starts 400, inc 40), y (ground 360), type (BLOCK, SPIKE, PORTAL_SHIP (Red), PORTAL_BALL (Orange), PORTAL_UFO (Green), PORTAL_WAVE (Cyan), PORTAL_ROBOT (Yellow), PORTAL_SPIDER (Hot Pink), PORTAL_SWING (Deep Blue), PORTAL_JETPACK (Violet)). Swing mode allows mid-air gravity flipping. Jetpack mode behaves like a snappy ship. Ensure layouts are playable for each mode.",
       responseMimeType: "application/json",
       responseSchema: {
         type: Type.OBJECT,

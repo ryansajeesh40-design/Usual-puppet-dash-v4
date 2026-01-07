@@ -12,7 +12,6 @@ const App: React.FC = () => {
   const [customLevels, setCustomLevels] = useState<LevelData[]>([]);
   const [showGameOver, setShowGameOver] = useState(false);
   const [showWin, setShowWin] = useState(false);
-  const [lastCoins, setLastCoins] = useState(0);
   const [gameSessionId, setGameSessionId] = useState<number>(0);
   
   const [showAIModal, setShowAIModal] = useState(false);
@@ -85,7 +84,6 @@ const App: React.FC = () => {
     setView('PLAY');
     setShowGameOver(false);
     setShowWin(false);
-    setLastCoins(0);
   };
 
   const startFakeLogs = () => {
@@ -144,7 +142,15 @@ const App: React.FC = () => {
       setAiPrompt('');
     } catch (err: any) {
       console.error(err);
-      setAiError(err.message || "The Puppet AI link was interrupted. This usually happens if the prompt is too complex or violates safety protocols.");
+      let message = "Neural Link Severed. The Puppet Core rejected the request.";
+      // Improve error clarity
+      if (err.message) {
+         if (err.message.includes("SAFETY")) message = "Safety Protocol Engaged. The request contained restricted concepts.";
+         else if (err.message.includes("quota")) message = "Neural Capacity Exceeded. Please try again later.";
+         else if (err.message.includes("400")) message = "Data Stream Corrupted. The prompt was invalid.";
+         else message = err.message;
+      }
+      setAiError(message);
     } finally {
       setIsAiGenerating(false);
       stopFakeLogs();
@@ -369,7 +375,7 @@ const App: React.FC = () => {
                 <div className="max-w-xl w-full glass p-12 rounded-[56px] shadow-2xl relative overflow-hidden min-h-[600px] flex flex-col animate-in zoom-in duration-500">
                     
                     {isAiGenerating ? (
-                        <div className="flex-1 flex flex-col relative py-8">
+                        <div className="flex-1 flex flex-col relative py-8 items-center justify-center">
                             {/* Neural Stream Particles */}
                             <div className="absolute inset-0 pointer-events-none opacity-20 overflow-hidden">
                                 {[...Array(10)].map((_, i) => (
@@ -389,70 +395,62 @@ const App: React.FC = () => {
                                 ))}
                             </div>
 
-                            <div className="relative z-10 flex-1 flex flex-col items-center justify-center">
+                            <div className="relative z-10 flex flex-col items-center justify-center">
+                                {/* Advanced Loading Spinner */}
                                 <div className="relative w-48 h-48 mb-12">
-                                    {/* Rotating Geometric Rings */}
-                                    <div className="absolute inset-0 border-4 border-dashed border-white/10 rounded-full animate-rotate-slow" />
-                                    <div className="absolute inset-4 border-2 border-dashed border-white/20 rounded-full animate-rotate-fast" />
-                                    <div className="absolute inset-10 border border-white/30 rounded-full animate-pulse" />
+                                    {/* Rotating Rings */}
+                                    <div className="absolute inset-0 border-t-2 border-l-2 border-white/20 rounded-full animate-spin duration-[3s]" />
+                                    <div className="absolute inset-4 border-b-2 border-r-2 border-white/40 rounded-full animate-spin duration-[2s] direction-reverse" style={{ animationDirection: 'reverse' }} />
+                                    <div className="absolute inset-8 border-t-4 border-white/60 rounded-full animate-pulse" />
                                     
                                     {/* The Core */}
-                                    <div className="absolute inset-16 rounded-full overflow-hidden flex items-center justify-center">
-                                        <div className="absolute inset-0 blur-3xl opacity-50" style={{ backgroundColor: settings.primaryColor }} />
-                                        <div className="relative z-10 w-full h-full flex items-center justify-center bg-black/40 rounded-full border border-white/20">
-                                            <span className="text-4xl animate-bounce">✨</span>
-                                        </div>
+                                    <div className="absolute inset-[35%] bg-white/5 backdrop-blur-md rounded-full flex items-center justify-center border border-white/20 shadow-[0_0_30px_rgba(255,255,255,0.15)]">
+                                        <div className="w-4 h-4 bg-white rounded-full animate-ping" />
                                     </div>
                                     
                                     {/* Orbiting Points */}
-                                    {[...Array(6)].map((_, i) => (
+                                    {[...Array(4)].map((_, i) => (
                                         <div 
                                             key={i}
                                             className="absolute w-2 h-2 rounded-full bg-white shadow-lg"
                                             style={{ 
                                                 top: '50%', 
                                                 left: '50%',
-                                                transform: `rotate(${i * 60}deg) translateX(90px) rotate(-${i * 60}deg)`,
-                                                animation: 'pulse 1s ease-in-out infinite',
-                                                animationDelay: `${i * 0.1}s`
+                                                transform: `rotate(${i * 90}deg) translateX(70px) rotate(-${i * 90}deg)`,
+                                                animation: 'spin 3s linear infinite',
                                             }}
                                         />
                                     ))}
                                 </div>
 
-                                <div className="text-center space-y-4">
-                                    <h3 className="text-4xl font-orbitron font-black text-white tracking-tighter">NEURAL SYNTHESIS</h3>
-                                    <p className="text-white/20 text-[10px] font-bold tracking-[0.6em] uppercase">Status: Architecting Reality</p>
+                                <div className="text-center space-y-4 max-w-xs mx-auto">
+                                    <h3 className="text-4xl font-orbitron font-black text-white tracking-tighter">SYNTHESIZING</h3>
+                                    <p className="text-white/30 text-[10px] font-bold tracking-[0.6em] uppercase animate-pulse">Neural Architecture Construction</p>
                                     
                                     {/* Fake Terminal Logs */}
-                                    <div className="mt-8 bg-black/60 border border-white/5 p-4 rounded-2xl w-64 h-32 overflow-hidden text-left font-mono text-[9px] text-white/40 leading-relaxed shadow-inner">
+                                    <div className="mt-8 bg-black/60 border border-white/5 p-4 rounded-2xl w-full h-32 overflow-hidden text-left font-mono text-[9px] text-white/40 leading-relaxed shadow-inner">
                                         {terminalLogs.map((log, i) => (
                                             <div key={i} className="animate-in slide-in-from-bottom-1 duration-300">
                                                 <span className="text-white/20 mr-2">&gt;</span>
+                                                <span className="text-emerald-500/50">{log}</span>
                                             </div>
                                         ))}
                                     </div>
                                 </div>
                             </div>
                             
-                            <div className="mt-8 px-12 pb-4">
+                            <div className="w-full mt-8 px-12">
                                 <div className="w-full h-1 bg-white/5 rounded-full overflow-hidden">
-                                    <div className="h-full bg-gradient-to-r from-transparent via-white to-transparent animate-progress" style={{ width: '100%' }} />
+                                    <div className="h-full bg-gradient-to-r from-transparent via-emerald-400 to-transparent animate-progress shadow-[0_0_10px_#34d399]" style={{ width: '100%' }} />
                                 </div>
-                                <button 
-                                    onClick={() => { setIsAiGenerating(false); stopFakeLogs(); setShowAIModal(false); setView('MENU'); }}
-                                    className="w-full mt-10 py-2 text-white/10 hover:text-white/40 transition-colors font-black text-[9px] uppercase tracking-[0.5em] border-t border-white/5 pt-6"
-                                >
-                                    ABORT NEURAL SEQUENCE // RETURN TO MENU
-                                </button>
                             </div>
                         </div>
                     ) : aiError ? (
                         <div className="flex-1 flex flex-col items-center justify-center text-center animate-in zoom-in duration-500">
-                            <div className="w-24 h-24 rounded-full bg-red-500/10 flex items-center justify-center mb-8 border border-red-500/20 shadow-lg">
+                            <div className="w-24 h-24 rounded-full bg-red-500/10 flex items-center justify-center mb-8 border border-red-500/20 shadow-[0_0_30px_rgba(239,68,68,0.2)]">
                                 <span className="text-4xl">⚠️</span>
                             </div>
-                            <h4 className="text-3xl font-orbitron font-black text-red-500 mb-6 uppercase tracking-tighter">Link Failure</h4>
+                            <h4 className="text-3xl font-orbitron font-black text-red-500 mb-6 uppercase tracking-tighter">Synthesis Failed</h4>
                             <div className="p-6 bg-red-950/20 border border-red-500/20 rounded-[32px] mb-12 max-w-sm">
                                 <p className="text-red-200/60 text-xs font-bold leading-relaxed uppercase tracking-widest">{aiError}</p>
                             </div>
@@ -524,8 +522,8 @@ const App: React.FC = () => {
           key={gameSessionId}
           level={activeLevel} 
           settings={settings}
-          onGameOver={(coins) => { setLastCoins(coins); setShowGameOver(true); }}
-          onWin={(coins) => { setLastCoins(coins); setShowWin(true); }}
+          onGameOver={() => setShowGameOver(true)}
+          onWin={() => setShowWin(true)}
           isPausedExternal={showGameOver || showWin}
           onQuit={() => setView('LEVEL_SELECT')}
           onRestart={() => startGame(activeLevel)}
@@ -537,11 +535,6 @@ const App: React.FC = () => {
               <h2 className="text-6xl font-orbitron font-black text-red-500 mb-2 leading-none">STRINGS<br/>CUT</h2>
               <p className="text-white/20 text-[10px] font-bold tracking-[0.4em] uppercase mb-6">Neural Feedback Terminated</p>
               
-              <div className="flex items-center justify-center gap-3 mb-10 bg-white/5 py-3 rounded-3xl">
-                <div className="w-5 h-5 rounded-full bg-[#ffd700]" />
-                <span className="text-white font-orbitron text-xl font-black">{lastCoins} COINS</span>
-              </div>
-
               <div className="flex flex-col gap-5">
                 <button onClick={() => startGame(activeLevel)} className="py-6 bg-white text-black font-black text-2xl rounded-full hover:scale-105 transition-all shadow-xl active:scale-95">REATTEMPT</button>
                 <button onClick={() => setView('LEVEL_SELECT')} className="py-4 text-white/30 hover:text-white transition-colors font-black text-sm uppercase tracking-widest">ABORT MISSION</button>
@@ -556,11 +549,6 @@ const App: React.FC = () => {
               <h2 className="text-6xl font-orbitron font-black text-emerald-400 mb-2 leading-none">PUPPET<br/>MASTER</h2>
               <p className="text-white/20 text-[10px] font-bold tracking-[0.4em] uppercase mb-6">Neural Synthesis Optimized</p>
               
-              <div className="flex items-center justify-center gap-3 mb-10 bg-emerald-500/10 py-3 rounded-3xl border border-emerald-500/20">
-                <div className="w-5 h-5 rounded-full bg-[#ffd700] shadow-[0_0_15px_#ffd700]" />
-                <span className="text-white font-orbitron text-xl font-black">{lastCoins} COINS RETRIEVED</span>
-              </div>
-
               <div className="flex flex-col gap-5">
                 <button onClick={() => setView('LEVEL_SELECT')} className="py-6 bg-emerald-500 text-black font-black text-2xl rounded-full hover:scale-105 transition-all shadow-[0_0_40px_rgba(16,185,129,0.3)] active:scale-95">CONTINUE</button>
                 <button onClick={() => startGame(activeLevel)} className="py-4 text-white/30 hover:text-white transition-colors font-black text-sm uppercase tracking-widest">REPLAY SEQUENCE</button>

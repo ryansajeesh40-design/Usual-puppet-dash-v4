@@ -10,8 +10,7 @@ export enum ObjectType {
   PORTAL_SPIDER = 'PORTAL_SPIDER',
   PORTAL_SWING = 'PORTAL_SWING',
   PORTAL_JETPACK = 'PORTAL_JETPACK',
-  PORTAL_CUBE = 'PORTAL_CUBE',
-  COIN = 'COIN'
+  PORTAL_CUBE = 'PORTAL_CUBE'
 }
 
 export interface GameObject {

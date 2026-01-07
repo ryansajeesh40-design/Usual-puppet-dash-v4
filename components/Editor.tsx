@@ -37,67 +37,127 @@ const getPortalHue = (type: ObjectType): number => {
   return 300;
 };
 
-const NeuralWeb: React.FC<{ color: string }> = ({ color }) => {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
+// --- Scramble Text Component ---
+const ScrambleText: React.FC<{ text: string, className?: string, trigger?: any }> = ({ text, className, trigger }) => {
+  const [display, setDisplay] = useState(text);
+  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789#@&%[]";
   
   useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
+    let iter = 0;
+    const interval = setInterval(() => {
+      setDisplay(text.split("").map((letter, index) => {
+        if (index < iter) return text[index];
+        return chars[Math.floor(Math.random() * chars.length)];
+      }).join(""));
+      
+      if (iter >= text.length) clearInterval(interval);
+      iter += 1/2; 
+    }, 30);
+    return () => clearInterval(interval);
+  }, [text, trigger]);
 
-    let animationFrameId: number;
-    const particles: { x: number; y: number; vx: number; vy: number }[] = [];
-    const particleCount = 40;
+  return <span className={className}>{display}</span>;
+}
 
-    for (let i = 0; i < particleCount; i++) {
-      particles.push({
-        x: Math.random() * canvas.width,
-        y: Math.random() * canvas.height,
-        vx: (Math.random() - 0.5) * 1,
-        vy: (Math.random() - 0.5) * 1
-      });
-    }
+// --- AI Visualization Components ---
 
-    const animate = () => {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      ctx.strokeStyle = color;
-      ctx.fillStyle = color;
-      ctx.globalAlpha = 0.2;
+const NeuralNode: React.FC<{ x: number, y: number, delay: number, color: string }> = ({ x, y, delay, color }) => (
+    <circle cx={x} cy={y} r="2" fill={color} className="animate-pulse">
+        <animate attributeName="opacity" values="0;1;0" dur="2s" begin={`${delay}s`} repeatCount="indefinite" />
+        <animate attributeName="r" values="2;4;2" dur="2s" begin={`${delay}s`} repeatCount="indefinite" />
+    </circle>
+);
 
-      particles.forEach((p, i) => {
-        p.x += p.vx;
-        p.y += p.vy;
+const ConnectionLine: React.FC<{ x1: number, y1: number, x2: number, y2: number, delay: number, color: string }> = ({ x1, y1, x2, y2, delay, color }) => (
+    <line x1={x1} y1={y1} x2={x2} y2={y2} stroke={color} strokeWidth="0.5" strokeOpacity="0.4">
+        <animate attributeName="stroke-dasharray" values="0,100;100,0" dur="1.5s" begin={`${delay}s`} repeatCount="indefinite" />
+        <animate attributeName="opacity" values="0;0.5;0" dur="1.5s" begin={`${delay}s`} repeatCount="indefinite" />
+    </line>
+);
 
-        if (p.x < 0 || p.x > canvas.width) p.vx *= -1;
-        if (p.y < 0 || p.y > canvas.height) p.vy *= -1;
+const AIProcessingHub: React.FC<{ phase: string, progress: number, color: string }> = ({ phase, progress, color }) => {
+    // Generate static nodes for the visualization
+    const nodes = useMemo(() => {
+        return Array.from({ length: 12 }).map((_, i) => ({
+            x: 50 + Math.cos(i * (Math.PI / 6)) * 40,
+            y: 50 + Math.sin(i * (Math.PI / 6)) * 40,
+            delay: Math.random() * 2
+        }));
+    }, []);
 
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, 2, 0, Math.PI * 2);
-        ctx.fill();
+    return (
+        <div className="flex flex-col items-center justify-center w-full h-full">
+            <div className="relative w-64 h-64 mb-8">
+                <svg viewBox="0 0 100 100" className="w-full h-full drop-shadow-[0_0_15px_rgba(255,255,255,0.3)]">
+                    <defs>
+                        <linearGradient id="scanGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+                            <stop offset="0%" stopColor={color} stopOpacity="0" />
+                            <stop offset="50%" stopColor={color} stopOpacity="0.5" />
+                            <stop offset="100%" stopColor={color} stopOpacity="0" />
+                        </linearGradient>
+                    </defs>
 
-        for (let j = i + 1; j < particles.length; j++) {
-          const p2 = particles[j];
-          const dist = Math.sqrt((p.x - p2.x) ** 2 + (p.y - p2.y) ** 2);
-          if (dist < 80) {
-            ctx.globalAlpha = (1 - dist / 80) * 0.3;
-            ctx.beginPath();
-            ctx.moveTo(p.x, p.y);
-            ctx.lineTo(p2.x, p2.y);
-            ctx.stroke();
-          }
-        }
-      });
+                    {/* Rotating Rings */}
+                    <g className="animate-rotate-slow origin-center">
+                        <circle cx="50" cy="50" r="48" fill="none" stroke={color} strokeWidth="0.2" strokeOpacity="0.3" strokeDasharray="4 4" />
+                        <circle cx="50" cy="50" r="40" fill="none" stroke={color} strokeWidth="0.5" strokeOpacity="0.5" strokeDasharray="10 10" />
+                    </g>
+                    <g className="animate-rotate-fast origin-center" style={{ animationDirection: 'reverse' }}>
+                         <circle cx="50" cy="50" r="30" fill="none" stroke={color} strokeWidth="0.3" strokeOpacity="0.6" strokeDasharray="2 8" />
+                    </g>
 
-      animationFrameId = requestAnimationFrame(animate);
-    };
+                    {/* Neural Network Visualization */}
+                    {nodes.map((n, i) => (
+                        <NeuralNode key={i} x={n.x} y={n.y} delay={n.delay} color="#fff" />
+                    ))}
+                    {nodes.map((n, i) => (
+                        <ConnectionLine 
+                            key={`l-${i}`} 
+                            x1={n.x} y1={n.y} 
+                            x2={nodes[(i + 5) % nodes.length].x} 
+                            y2={nodes[(i + 5) % nodes.length].y} 
+                            delay={n.delay} 
+                            color={color} 
+                        />
+                    ))}
 
-    animate();
-    return () => cancelAnimationFrame(animationFrameId);
-  }, [color]);
+                    {/* Central Core */}
+                    <circle cx="50" cy="50" r="10" fill={color} fillOpacity="0.2" className="animate-pulse" />
+                    <circle cx="50" cy="50" r="5" fill="#fff" className="animate-ping" />
+                    
+                    {/* Scanning Line */}
+                    <rect x="0" y="0" width="100" height="100" fill="url(#scanGrad)" opacity="0.3">
+                         <animate attributeName="y" values="-100;100" dur="2s" repeatCount="indefinite" />
+                    </rect>
+                </svg>
+                
+                {/* Progress Ring Overlay */}
+                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                     <span className="text-3xl font-black font-mono text-white mix-blend-overlay">{Math.round(progress)}%</span>
+                </div>
+            </div>
 
-  return <canvas ref={canvasRef} width={400} height={400} className="absolute inset-0 w-full h-full" />;
+            <div className="w-full max-w-sm text-center">
+                <ScrambleText text={phase} trigger={phase} className="text-2xl font-orbitron font-black text-white mb-2 uppercase tracking-widest block h-8" />
+                <div className="w-full h-1 bg-white/10 rounded-full mt-4 overflow-hidden relative">
+                     <div 
+                        className="h-full bg-white shadow-[0_0_10px_white] transition-all duration-300 ease-out relative" 
+                        style={{ width: `${progress}%` }} 
+                     >
+                        <div className="absolute right-0 top-1/2 -translate-y-1/2 w-2 h-2 bg-white rounded-full shadow-[0_0_10px_#fff] animate-ping" />
+                     </div>
+                </div>
+                <div className="flex justify-between mt-2 text-[9px] font-mono text-white/30 uppercase tracking-widest">
+                    <span>Initiated</span>
+                    <span>Processing</span>
+                    <span>Completing</span>
+                </div>
+            </div>
+        </div>
+    );
 };
+
+// --- Editor Component ---
 
 const Editor: React.FC<EditorProps> = ({ onSave, onExit, settings, initialLevel }) => {
   const [level, setLevel] = useState<LevelData>(() => {
@@ -125,6 +185,8 @@ const Editor: React.FC<EditorProps> = ({ onSave, onExit, settings, initialLevel 
   const [scrollX, setScrollX] = useState<number>(0);
   const [snapToGrid, setSnapToGrid] = useState<boolean>(true);
   const [confirmingAction, setConfirmingAction] = useState<'SAVE' | 'EXIT' | 'CLEAR' | 'ARCHIVE' | 'SYNTHESIZE' | null>(null);
+  const [viewingHistory, setViewingHistory] = useState(false);
+  const [historyItems, setHistoryItems] = useState<AIHistoryItem[]>([]);
   
   const [aiPrompt, setAiPrompt] = useState('');
   const [isAiGenerating, setIsAiGenerating] = useState(false);
@@ -141,11 +203,12 @@ const Editor: React.FC<EditorProps> = ({ onSave, onExit, settings, initialLevel 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const spriteCacheRef = useRef<Map<ObjectType, HTMLCanvasElement>>(new Map());
   const gridCacheRef = useRef<HTMLCanvasElement | null>(null);
+  
+  const renderBufferRef = useRef<GameObject[]>([]);
+  const processedSetRef = useRef<Set<string>>(new Set());
 
-  // Performance Optimization: Spatial Partitioning with Pre-Sorted Chunks
   const spatialIndex = useMemo(() => {
     const index = new Map<number, GameObject[]>();
-    // Sort entire object list once by Z to maintain consistency during partitioning
     const sortedObjects = [...level.objects].sort((a, b) => (a.z || 0) - (b.z || 0));
     
     sortedObjects.forEach(obj => {
@@ -158,6 +221,15 @@ const Editor: React.FC<EditorProps> = ({ onSave, onExit, settings, initialLevel 
     });
     return index;
   }, [level.objects]);
+
+  useEffect(() => {
+    if (viewingHistory) {
+      try {
+        const raw = localStorage.getItem('puppet_dash_ai_history');
+        if (raw) setHistoryItems(JSON.parse(raw));
+      } catch (e) { console.error(e); }
+    }
+  }, [viewingHistory]);
 
   useEffect(() => {
     spriteCacheRef.current.clear();
@@ -189,10 +261,6 @@ const Editor: React.FC<EditorProps> = ({ onSave, onExit, settings, initialLevel 
         ctx.lineWidth = 3;
         ctx.beginPath(); ctx.ellipse(BLOCK_SIZE/2, 40, 12, 35, 0, 0, Math.PI * 2); ctx.stroke();
         ctx.fillStyle = `hsla(${hue}, 100%, 50%, 0.1)`; ctx.fill();
-      } else if (type === ObjectType.COIN) {
-        ctx.fillStyle = '#ffd700';
-        ctx.beginPath(); ctx.arc(BLOCK_SIZE / 2, BLOCK_SIZE / 2, 8, 0, Math.PI * 2); ctx.fill();
-        ctx.strokeStyle = '#fff'; ctx.stroke();
       }
       spriteCacheRef.current.set(type, offscreen);
     });
@@ -224,11 +292,12 @@ const Editor: React.FC<EditorProps> = ({ onSave, onExit, settings, initialLevel 
     setAiProgress(0);
     
     const phases = [
-      { p: 10, t: 'Connecting to Puppet Core...' },
-      { p: 30, t: 'Mapping Rhythmic Vectors...' },
-      { p: 50, t: 'Synthesizing Entitites...' },
-      { p: 75, t: 'Inverting Gravity Nodes...' },
-      { p: 90, t: 'Finalizing Layout...' }
+      { p: 5, t: 'ESTABLISHING LINK' },
+      { p: 20, t: 'PARSING VECTORS' },
+      { p: 40, t: 'MAPPING GEOMETRY' },
+      { p: 60, t: 'OPTIMIZING FLOW' },
+      { p: 80, t: 'FINALIZING ENTITIES' },
+      { p: 95, t: 'SYNCING CORE...' }
     ];
 
     let phaseIdx = 0;
@@ -238,26 +307,43 @@ const Editor: React.FC<EditorProps> = ({ onSave, onExit, settings, initialLevel 
         setAiPhase(phases[phaseIdx].t);
         phaseIdx++;
       }
-    }, 1500);
+    }, 800);
 
     try {
       const result = await generateLevelIdea(aiPrompt);
+      const historyJson = localStorage.getItem('puppet_dash_ai_history');
+      let history: AIHistoryItem[] = historyJson ? JSON.parse(historyJson) : [];
+      history.unshift({
+        id: `ai-${Date.now()}`,
+        name: result.name || `Neural-${Date.now().toString().slice(-4)}`,
+        prompt: aiPrompt,
+        objects: result.objects,
+        timestamp: Date.now()
+      });
+      localStorage.setItem('puppet_dash_ai_history', JSON.stringify(history.slice(0, 20)));
+
       pushUndo();
       setLevel(prev => ({ ...prev, objects: result.objects }));
       setAiProgress(100);
-      setAiPhase('Neural Layout Complete');
+      setAiPhase('COMPLETE');
       setTimeout(() => {
         setConfirmingAction(null);
         setIsAiGenerating(false);
         setAiPrompt('');
-      }, 800);
+      }, 1000);
     } catch (err) {
       console.error(err);
-      setAiPhase('Connection Severed');
-      setIsAiGenerating(false);
+      setAiPhase('CONNECTION FAILURE');
+      setTimeout(() => setIsAiGenerating(false), 2000);
     } finally {
       clearInterval(interval);
     }
+  };
+
+  const loadFromHistory = (item: AIHistoryItem) => {
+    pushUndo();
+    setLevel(prev => ({ ...prev, objects: item.objects }));
+    setViewingHistory(false);
   };
 
   const startPreview = () => {
@@ -266,29 +352,57 @@ const Editor: React.FC<EditorProps> = ({ onSave, onExit, settings, initialLevel 
     setIsPreviewing(true);
   };
 
-  // Z-Layering logic
-  const moveLayer = (direction: 'front' | 'back' | 'up' | 'down') => {
+  const moveLayer = useCallback((direction: 'front' | 'back' | 'up' | 'down') => {
     if (!selectedId) return;
+    setLevel(prevLevel => {
+      const updated = [...prevLevel.objects];
+      const idx = updated.findIndex(o => o.id === selectedId);
+      if (idx === -1) return prevLevel;
+      const currentZ = updated[idx].z || 0;
+      const allZs = updated.map(o => o.z || 0);
+      const minZ = Math.min(...allZs);
+      const maxZ = Math.max(...allZs);
+      if (direction === 'front') updated[idx].z = maxZ + 1;
+      else if (direction === 'back') updated[idx].z = minZ - 1;
+      else if (direction === 'up') updated[idx].z = currentZ + 1;
+      else if (direction === 'down') updated[idx].z = currentZ - 1;
+      return { ...prevLevel, objects: updated };
+    });
+  }, [selectedId]);
+
+  const autoRoof = () => {
     pushUndo();
-    const updated = [...level.objects];
-    const idx = updated.findIndex(o => o.id === selectedId);
-    if (idx === -1) return;
-
-    const currentZ = updated[idx].z || 0;
-    const allZs = updated.map(o => o.z || 0);
-    const minZ = Math.min(...allZs);
-    const maxZ = Math.max(...allZs);
-
-    if (direction === 'front') updated[idx].z = maxZ + 1;
-    else if (direction === 'back') updated[idx].z = minZ - 1;
-    else if (direction === 'up') updated[idx].z = currentZ + 1;
-    else if (direction === 'down') updated[idx].z = currentZ - 1;
-
-    setLevel({ ...level, objects: updated });
+    const maxX = level.objects.reduce((max, obj) => Math.max(max, obj.x), 0) + 1000;
+    const newObjects = [...level.objects];
+    for (let x = 0; x <= maxX; x += BLOCK_SIZE) {
+        // Prevent duplicates at y=0
+        if (!newObjects.some(o => o.x === x && o.y === 0 && o.type === ObjectType.BLOCK)) {
+            newObjects.push({
+                id: `roof-${Date.now()}-${x}`,
+                type: ObjectType.BLOCK,
+                x: x,
+                y: 0,
+                z: 0
+            });
+        }
+    }
+    setLevel(prev => ({ ...prev, objects: newObjects }));
   };
 
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+        if ((e.target as HTMLElement).tagName === 'TEXTAREA' || (e.target as HTMLElement).tagName === 'INPUT') return;
+        if (selectedId) {
+             if (e.key === '[') { e.shiftKey ? moveLayer('back') : moveLayer('down'); } 
+             else if (e.key === ']') { e.shiftKey ? moveLayer('front') : moveLayer('up'); }
+        }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedId, moveLayer]);
+
   const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (confirmingAction || isPreviewing) return;
+    if (confirmingAction || isPreviewing || viewingHistory) return;
     const canvas = canvasRef.current;
     if (!canvas) return;
     const rect = canvas.getBoundingClientRect();
@@ -299,14 +413,13 @@ const Editor: React.FC<EditorProps> = ({ onSave, onExit, settings, initialLevel 
 
     let x: number, y: number;
     if (snapToGrid) {
-      x = Math.round(worldX / BLOCK_SIZE) * BLOCK_SIZE - (BLOCK_SIZE / 2);
-      y = Math.round(worldY / BLOCK_SIZE) * BLOCK_SIZE - (BLOCK_SIZE / 2);
+      x = Math.floor(worldX / BLOCK_SIZE) * BLOCK_SIZE;
+      y = Math.floor(worldY / BLOCK_SIZE) * BLOCK_SIZE;
     } else {
       x = worldX - (BLOCK_SIZE / 2);
       y = worldY - (BLOCK_SIZE / 2);
     }
     
-    // Find clicked object (respecting Z-order: check top-most first)
     const candidates = level.objects.filter(o => 
       worldX >= o.x && worldX <= o.x + BLOCK_SIZE && worldY >= o.y && worldY <= o.y + BLOCK_SIZE
     ).sort((a, b) => (b.z || 0) - (a.z || 0));
@@ -338,7 +451,6 @@ const Editor: React.FC<EditorProps> = ({ onSave, onExit, settings, initialLevel 
     }
   };
 
-  // Optimized Rendering Loop
   useEffect(() => {
     if (isPreviewing) return;
     const canvas = canvasRef.current;
@@ -349,7 +461,6 @@ const Editor: React.FC<EditorProps> = ({ onSave, onExit, settings, initialLevel 
     const render = () => {
       ctx.clearRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
       
-      // Draw cached grid chunks
       if (gridCacheRef.current) {
         const xOffset = -scrollX % CHUNK_SIZE;
         for (let x = xOffset - CHUNK_SIZE; x < GAME_WIDTH + CHUNK_SIZE; x += CHUNK_SIZE) {
@@ -360,6 +471,12 @@ const Editor: React.FC<EditorProps> = ({ onSave, onExit, settings, initialLevel 
       ctx.strokeStyle = settings.primaryColor;
       ctx.lineWidth = 2;
       ctx.beginPath(); ctx.moveTo(0, 400); ctx.lineTo(GAME_WIDTH, 400); ctx.stroke();
+      
+      // Draw visible ceiling line guide
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+      ctx.setLineDash([5, 5]);
+      ctx.beginPath(); ctx.moveTo(0, 40); ctx.lineTo(GAME_WIDTH, 40); ctx.stroke();
+      ctx.setLineDash([]);
 
       ctx.save();
       ctx.translate(-scrollX, 0);
@@ -367,20 +484,33 @@ const Editor: React.FC<EditorProps> = ({ onSave, onExit, settings, initialLevel 
       const startChunk = Math.floor(scrollX / CHUNK_SIZE);
       const endChunk = Math.floor((scrollX + GAME_WIDTH) / CHUNK_SIZE);
       
-      // Collect unique objects across visible chunks
-      // Using a Map ensures we only draw each object once (for large objects spanning chunks)
-      const drawBatch = new Map<string, GameObject>();
+      const visibleObjects = renderBufferRef.current;
+      visibleObjects.length = 0;
+      const processedIds = processedSetRef.current;
+      processedIds.clear();
+
+      const viewLeft = scrollX;
+      const viewRight = scrollX + GAME_WIDTH;
+
       for (let i = startChunk; i <= endChunk; i++) {
         const chunkObjects = spatialIndex.get(i);
         if (chunkObjects) {
-          for (const obj of chunkObjects) drawBatch.set(obj.id, obj);
+          for (let j = 0; j < chunkObjects.length; j++) {
+             const obj = chunkObjects[j];
+             if (!processedIds.has(obj.id)) {
+                 if (obj.x + BLOCK_SIZE >= viewLeft && obj.x <= viewRight) {
+                     visibleObjects.push(obj);
+                     processedIds.add(obj.id);
+                 }
+             }
+          }
         }
       }
 
-      // Sort batch by Z for final draw (chunks are already partially sorted, but map order is not guaranteed)
-      const sortedBatch = Array.from(drawBatch.values()).sort((a, b) => (a.z || 0) - (b.z || 0));
+      visibleObjects.sort((a, b) => (a.z || 0) - (b.z || 0));
 
-      sortedBatch.forEach(obj => {
+      for (let i = 0; i < visibleObjects.length; i++) {
+        const obj = visibleObjects[i];
         const sprite = spriteCacheRef.current.get(obj.type);
         if (sprite) {
           const drawY = obj.type.startsWith('PORTAL_') ? obj.y + (BLOCK_SIZE / 2) - 40 : obj.y;
@@ -392,7 +522,7 @@ const Editor: React.FC<EditorProps> = ({ onSave, onExit, settings, initialLevel 
             ctx.strokeRect(obj.x - 2, drawY - 2, BLOCK_SIZE + 4, (obj.type.startsWith('PORTAL_') ? 80 : BLOCK_SIZE) + 4);
           }
         }
-      });
+      }
       ctx.restore();
     };
     const id = requestAnimationFrame(render);
@@ -438,9 +568,14 @@ const Editor: React.FC<EditorProps> = ({ onSave, onExit, settings, initialLevel 
           <span>▶</span> NEURAL PLAYTEST
         </button>
 
-        <button onClick={() => setConfirmingAction('SYNTHESIZE')} className="w-full py-4 bg-cyan-600/20 text-cyan-400 font-black text-[10px] rounded-xl flex items-center justify-center gap-2 border border-cyan-500/20 hover:bg-cyan-500/30 transition-all uppercase tracking-widest">
-          <span>✨</span> AI SYNTHESIS
-        </button>
+        <div className="grid grid-cols-2 gap-2">
+            <button onClick={() => setConfirmingAction('SYNTHESIZE')} className="py-4 bg-cyan-600/20 text-cyan-400 font-black text-[10px] rounded-xl flex flex-col items-center justify-center gap-1 border border-cyan-500/20 hover:bg-cyan-500/30 transition-all uppercase tracking-widest">
+              <span className="text-lg">✨</span> SYNTHESIS
+            </button>
+            <button onClick={() => setViewingHistory(true)} className="py-4 bg-purple-600/20 text-purple-400 font-black text-[10px] rounded-xl flex flex-col items-center justify-center gap-1 border border-purple-500/20 hover:bg-purple-500/30 transition-all uppercase tracking-widest">
+              <span className="text-lg">📜</span> HISTORY
+            </button>
+        </div>
 
         <div className="space-y-4">
           <label className="text-[10px] uppercase font-black text-zinc-500 tracking-widest block">Tools</label>
@@ -456,6 +591,13 @@ const Editor: React.FC<EditorProps> = ({ onSave, onExit, settings, initialLevel 
               className={`p-3 text-[10px] uppercase font-bold rounded border transition ${activeTool === 'ERASER' ? 'bg-red-600 border-red-400' : 'bg-neutral-700 border-transparent text-zinc-400'}`}
             >
               ERASER
+            </button>
+            <button 
+              onClick={autoRoof}
+              className="col-span-2 p-3 text-[10px] uppercase font-bold rounded border bg-neutral-700 border-transparent text-zinc-400 hover:text-white transition"
+              title="Adds blocks to the top row (y=0)"
+            >
+              AUTO-ROOF
             </button>
           </div>
 
@@ -475,16 +617,26 @@ const Editor: React.FC<EditorProps> = ({ onSave, onExit, settings, initialLevel 
 
         {selectedId && (
           <div className="mt-4 p-4 bg-black/40 rounded-xl border border-white/5 space-y-4 animate-in slide-in-from-left-4">
-             <div className="flex justify-between items-center">
-                <span className="text-[10px] font-black uppercase text-indigo-400 tracking-widest">Layering</span>
-                <span className="text-[10px] font-mono text-zinc-600">ID: {selectedId.slice(-4)}</span>
+             <div className="flex justify-between items-center border-b border-white/10 pb-2">
+                <span className="text-[10px] font-black uppercase text-indigo-400 tracking-widest">Layer Control</span>
+                <span className="text-[9px] font-mono text-zinc-500">#{selectedId.slice(-4)}</span>
              </div>
-             <div className="grid grid-cols-2 gap-2">
-                <button onClick={() => moveLayer('front')} className="p-2 bg-neutral-700 rounded text-[9px] font-bold uppercase hover:bg-neutral-600">To Front</button>
-                <button onClick={() => moveLayer('back')} className="p-2 bg-neutral-700 rounded text-[9px] font-bold uppercase hover:bg-neutral-600">To Back</button>
-                <button onClick={() => moveLayer('up')} className="p-2 bg-neutral-700 rounded text-[9px] font-bold uppercase hover:bg-neutral-600">Move Up</button>
-                <button onClick={() => moveLayer('down')} className="p-2 bg-neutral-700 rounded text-[9px] font-bold uppercase hover:bg-neutral-600">Move Down</button>
+             
+             <div className="grid grid-cols-4 gap-2">
+                <button onClick={() => { pushUndo(); moveLayer('front'); }} className="aspect-square bg-neutral-700 rounded-lg hover:bg-white/20 flex items-center justify-center text-white/80 transition-colors group relative" title="Bring to Front (Shift + ])">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 19V5M5 12l7-7 7 7" /><path d="M19 19H5" strokeWidth="3" /></svg>
+                </button>
+                <button onClick={() => { pushUndo(); moveLayer('up'); }} className="aspect-square bg-neutral-700 rounded-lg hover:bg-white/20 flex items-center justify-center text-white/80 transition-colors group relative" title="Move Up (])">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 19V5M5 12l7-7 7 7" /></svg>
+                </button>
+                <button onClick={() => { pushUndo(); moveLayer('down'); }} className="aspect-square bg-neutral-700 rounded-lg hover:bg-white/20 flex items-center justify-center text-white/80 transition-colors group relative" title="Move Down ([)">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 5v14M19 12l-7 7-7-7" /></svg>
+                </button>
+                <button onClick={() => { pushUndo(); moveLayer('back'); }} className="aspect-square bg-neutral-700 rounded-lg hover:bg-white/20 flex items-center justify-center text-white/80 transition-colors group relative" title="Send to Back (Shift + [)">
+                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 5v14M19 12l-7 7-7-7" /><path d="M19 5H5" strokeWidth="3" /></svg>
+                </button>
              </div>
+             <div className="text-[9px] text-center text-zinc-600 uppercase tracking-widest font-bold">Z-Index Adjust</div>
           </div>
         )}
         
@@ -513,27 +665,45 @@ const Editor: React.FC<EditorProps> = ({ onSave, onExit, settings, initialLevel 
         </div>
       </div>
 
+      {viewingHistory && (
+         <div className="absolute inset-0 z-[110] bg-black/95 backdrop-blur-sm flex items-center justify-center p-8 animate-in fade-in duration-300">
+             <div className="max-w-2xl w-full glass p-8 rounded-[40px] shadow-2xl flex flex-col h-[600px] animate-in slide-in-from-bottom-8 duration-300">
+                <div className="flex justify-between items-end mb-8 pb-4 border-b border-white/5">
+                    <div>
+                        <h3 className="text-3xl font-orbitron font-black text-white">MEMORY BANK</h3>
+                        <p className="text-purple-400 text-[10px] uppercase font-black tracking-[0.3em]">Recovered Neural Patterns</p>
+                    </div>
+                    <button onClick={() => setViewingHistory(false)} className="text-white/20 hover:text-white font-bold text-xs uppercase tracking-widest">Close</button>
+                </div>
+                
+                <div className="flex-1 overflow-y-auto space-y-4 pr-2 custom-scrollbar">
+                    {historyItems.length === 0 ? (
+                        <div className="h-full flex items-center justify-center text-white/20 font-mono text-xs uppercase tracking-widest">No Patterns Archived</div>
+                    ) : (
+                        historyItems.map(item => (
+                            <div key={item.id} className="bg-white/5 border border-white/5 p-6 rounded-3xl hover:bg-white/10 transition-colors group">
+                                <div className="flex justify-between items-start mb-2">
+                                    <span className="text-white font-bold text-lg font-orbitron">{item.name}</span>
+                                    <span className="text-white/20 font-mono text-[9px]">{new Date(item.timestamp).toLocaleDateString()}</span>
+                                </div>
+                                <p className="text-white/40 text-xs italic mb-4 line-clamp-2">"{item.prompt}"</p>
+                                <div className="flex justify-between items-center">
+                                    <span className="text-white/20 text-[9px] font-black uppercase tracking-widest">{item.objects.length} ENTITIES</span>
+                                    <button onClick={() => loadFromHistory(item)} className="px-4 py-2 bg-purple-600 text-white text-[9px] font-black uppercase tracking-widest rounded-full hover:bg-purple-500 transition-all shadow-lg shadow-purple-900/20 active:scale-95">LOAD PATTERN</button>
+                                </div>
+                            </div>
+                        ))
+                    )}
+                </div>
+             </div>
+         </div>
+      )}
+
       {confirmingAction === 'SYNTHESIZE' && (
         <div className="absolute inset-0 z-[110] bg-black/95 backdrop-blur-3xl flex items-center justify-center p-8 animate-in fade-in duration-500">
           <div className="max-w-xl w-full glass p-12 rounded-[56px] shadow-2xl relative overflow-hidden flex flex-col animate-in zoom-in duration-300 min-h-[500px]">
              {isAiGenerating ? (
-               <div className="flex-1 flex flex-col items-center justify-center text-center py-10">
-                  <div className="relative w-48 h-48 mb-10 overflow-hidden rounded-full border border-white/10 shadow-[0_0_50px_rgba(255,255,255,0.05)]">
-                      <NeuralWeb color={settings.primaryColor} />
-                      <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-transparent opacity-40" />
-                      <div className="absolute inset-0 flex items-center justify-center">
-                          <div className="text-6xl animate-pulse drop-shadow-[0_0_20px_rgba(255,255,255,0.5)]">✨</div>
-                      </div>
-                  </div>
-                  
-                  <div className="w-full max-w-sm px-8">
-                      <h3 className="text-3xl font-orbitron font-black text-white mb-2 uppercase tracking-tighter">{aiPhase}</h3>
-                      <div className="w-full h-2 bg-white/5 rounded-full mt-8 overflow-hidden">
-                          <div className="h-full bg-white transition-all duration-700 shadow-[0_0_15px_white]" style={{ width: `${aiProgress}%` }} />
-                      </div>
-                      <p className="text-[10px] font-black text-white/20 uppercase tracking-[0.4em] mt-4">Synthesis Buffer: {aiProgress}%</p>
-                  </div>
-               </div>
+               <AIProcessingHub phase={aiPhase} progress={aiProgress} color={settings.primaryColor} />
              ) : (
                <div className="flex-1 flex flex-col">
                   <div className="mb-8">

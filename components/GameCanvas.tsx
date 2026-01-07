@@ -1,6 +1,6 @@
 
 import React, { useRef, useEffect, useCallback, useState } from 'react';
-import { GameState, LevelData, ObjectType, UserSettings, PlayerMode } from '../types';
+import { GameState, LevelData, ObjectType, UserSettings, GameObject, PlayerMode } from '../types';
 import { 
     GAME_WIDTH, 
     GAME_HEIGHT, 
@@ -13,8 +13,8 @@ import {
 interface GameCanvasProps {
   level: LevelData;
   settings: UserSettings;
-  onGameOver: (coins: number) => void;
-  onWin: (coins: number) => void;
+  onGameOver: () => void;
+  onWin: () => void;
   isPausedExternal: boolean;
   onQuit: () => void;
   onRestart: () => void;
@@ -35,6 +35,7 @@ const SWING_GRAVITY = 0.5;
 const MAX_VY = 12;
 const MIN_WIN_DISTANCE = 3000;
 const TRAIL_LENGTH = 250;
+const CHUNK_SIZE = 600;
 
 function pointInTriangle(px: number, py: number, x1: number, y1: number, x2: number, y2: number, x3: number, y3: number) {
   const area = 0.5 * (-y2 * x3 + y1 * (-x2 + x3) + x1 * (y2 - y3) + x2 * y3);
@@ -61,7 +62,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
   onGameOver, 
   onWin, 
   isPausedExternal,
-  onQuit,
+  onQuit, 
   onRestart 
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -71,10 +72,25 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
   const spiderTeleportLine = useRef<{x: number, y1: number, y2: number, alpha: number} | null>(null);
   const portalAnimsRef = useRef<{x: number, y: number, hue: number, life: number}[]>([]);
   const portalFlashRef = useRef<{hue: number, life: number} | null>(null);
-  const coinAnimsRef = useRef<{x: number, y: number, life: number}[]>([]);
   const jumpParticlesRef = useRef<{x: number, y: number, vx: number, vy: number, life: number}[]>([]);
-  const collectedCoins = useRef<Set<string>>(new Set());
   
+  // Spatial Partitioning
+  const chunksRef = useRef<Map<number, GameObject[]>>(new Map());
+  const drawBufferRef = useRef<GameObject[]>([]);
+  const collisionBufferRef = useRef<GameObject[]>([]);
+
+  // Build Spatial Index
+  useEffect(() => {
+    const chunks = new Map<number, GameObject[]>();
+    level.objects.forEach(obj => {
+      const chunkId = Math.floor(obj.x / CHUNK_SIZE);
+      if (!chunks.has(chunkId)) chunks.set(chunkId, []);
+      chunks.get(chunkId)!.push(obj);
+    });
+    chunksRef.current = chunks;
+  }, [level]);
+  
+  // Screen shake ref
   const screenShake = useRef(0);
   const triggerShake = useCallback((intensity: number, scaleWithSpeed: boolean = true) => {
     const speedFactor = scaleWithSpeed ? (settings.speed / 5) : 1;
@@ -83,11 +99,10 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
   
   const [isLocalPaused, setIsLocalPaused] = useState(false);
   const [countdown, setCountdown] = useState<number | null>(null);
+  const countdownTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
   const [elapsedTime, setElapsedTime] = useState(0);
   const [completion, setCompletion] = useState(0);
-  const [coinsCount, setCoinsCount] = useState(0);
-  
-  const totalCoinsInLevel = level.objects.filter(o => o.type === ObjectType.COIN).length;
 
   const onSurfaceRef = useRef(false);
   const actionBufferActive = useRef(false); 
@@ -144,7 +159,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
     scheduler();
   };
 
-  const playSound = (type: 'jump' | 'death' | 'collect' | 'portal') => {
+  const playSound = (type: 'jump' | 'death' | 'portal') => {
     if (!audioCtxRef.current || !masterGainRef.current) return;
     const ctx = audioCtxRef.current;
     const osc = ctx.createOscillator();
@@ -168,14 +183,6 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
       gain.gain.linearRampToValueAtTime(0.01, now + 0.5);
       osc.start(now);
       osc.stop(now + 0.5);
-    } else if (type === 'collect') {
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(800, now);
-      osc.frequency.exponentialRampToValueAtTime(1200, now + 0.1);
-      gain.gain.setValueAtTime(0.1, now);
-      gain.gain.exponentialRampToValueAtTime(0.01, now + 0.2);
-      osc.start(now);
-      osc.stop(now + 0.2);
     } else if (type === 'portal') {
       osc.type = 'square';
       osc.frequency.setValueAtTime(200, now);
@@ -199,25 +206,39 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
 
   const togglePause = useCallback(() => {
     initAudio();
-    setIsLocalPaused(prev => {
-      const next = !prev;
-      if (next) {
-        pauseStartTimeRef.current = Date.now();
+    
+    setIsLocalPaused(prevIsPaused => {
+      const willPause = !prevIsPaused;
+
+      if (willPause) {
+        if (countdownTimerRef.current) {
+            clearInterval(countdownTimerRef.current);
+            countdownTimerRef.current = null;
+            setCountdown(null);
+        } else {
+            pauseStartTimeRef.current = Date.now();
+        }
       } else {
         setCountdown(3);
-        const timer = setInterval(() => {
-          setCountdown(c => {
-            if (c !== null && c > 1) return c - 1;
-            clearInterval(timer);
-            if (pauseStartTimeRef.current) {
-                totalPauseDurationRef.current += Date.now() - pauseStartTimeRef.current;
-                pauseStartTimeRef.current = null;
-            }
-            return null;
-          });
+        countdownTimerRef.current = setInterval(() => {
+            setCountdown(c => {
+                if (c !== null && c > 1) return c - 1;
+                
+                if (countdownTimerRef.current) {
+                    clearInterval(countdownTimerRef.current);
+                    countdownTimerRef.current = null;
+                }
+                
+                if (pauseStartTimeRef.current) {
+                    const duration = Date.now() - pauseStartTimeRef.current;
+                    totalPauseDurationRef.current += duration;
+                    pauseStartTimeRef.current = null;
+                }
+                return null;
+            });
         }, 800);
       }
-      return next;
+      return willPause;
     });
   }, []);
 
@@ -276,8 +297,16 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
       const step = s.player.gravityDir * 5;
       let found = false;
 
-      for (let y = currentY + step; (s.player.gravityDir === 1 ? y < 360 : y > 40); y += step) {
-        for (const obj of level.objects) {
+      // Spatial collision check for Spider teleport
+      const pChunk = Math.floor(s.player.x / CHUNK_SIZE);
+      const candidates: GameObject[] = [];
+      for(let c = pChunk - 1; c <= pChunk + 2; c++) {
+          const chunk = chunksRef.current.get(c);
+          if(chunk) for(let k=0; k<chunk.length; k++) candidates.push(chunk[k]);
+      }
+
+      for (let y = currentY + step; (s.player.gravityDir === 1 ? y < 360 : y > 0); y += step) {
+        for (const obj of candidates) {
           if (obj.type === ObjectType.BLOCK && s.player.x < obj.x + BLOCK_SIZE && s.player.x + PLAYER_SIZE > obj.x) {
             if (s.player.gravityDir === 1 && y + PLAYER_SIZE >= obj.y && y < obj.y) {
                currentY = obj.y - PLAYER_SIZE;
@@ -290,7 +319,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
         }
         if (found) break;
       }
-      if (!found) currentY = s.player.gravityDir === 1 ? 360 : 40;
+      if (!found) currentY = s.player.gravityDir === 1 ? 360 : 0;
       s.player.y = currentY;
       onSurfaceRef.current = true;
       spiderTeleportLine.current = { x: s.player.x + PLAYER_SIZE / 2, y1: oldY + PLAYER_SIZE / 2, y2: currentY + PLAYER_SIZE / 2, alpha: 1.0 };
@@ -326,6 +355,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
       window.removeEventListener('mousedown', handleMouseDown);
       window.removeEventListener('mouseup', handleMouseUp);
       if (bgmLoopRef.current) cancelAnimationFrame(bgmLoopRef.current);
+      if (countdownTimerRef.current) clearInterval(countdownTimerRef.current);
     };
   }, [triggerInteraction, togglePause]);
 
@@ -335,6 +365,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
+    // We calculate this once, assuming static level length.
     const lastObjX = level.objects.reduce((max, obj) => Math.max(max, obj.x), 0);
     const winX = Math.max(MIN_WIN_DISTANCE, lastObjX + 1000);
 
@@ -343,6 +374,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
       const s = stateRef.current;
       s.frame++;
       
+      // Screen shake decay
       if (screenShake.current > 0) screenShake.current *= 0.9;
       
       if (spiderTeleportLine.current) {
@@ -354,7 +386,6 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
           .map(p => ({ ...p, x: p.x + p.vx, y: p.y + p.vy, life: p.life - 0.05 }))
           .filter(p => p.life > 0);
 
-      // Portal decay now factors in game speed slightly for "snappier" feeling
       const decayBase = 0.04 * (settings.speed / 5);
       portalAnimsRef.current = portalAnimsRef.current
           .map(a => ({ ...a, life: a.life - decayBase }))
@@ -364,10 +395,6 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
         portalFlashRef.current.life -= 0.1;
         if (portalFlashRef.current.life <= 0) portalFlashRef.current = null;
       }
-      
-      coinAnimsRef.current = coinAnimsRef.current
-          .map(a => ({ ...a, life: a.life - 0.03, y: a.y - 1 }))
-          .filter(a => a.life > 0);
 
       const now = Date.now();
       const elapsed = (now - startTimeRef.current - totalPauseDurationRef.current) / 1000;
@@ -432,12 +459,26 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
         }
 
         if (s.player.y >= 360) { s.player.y = 360; s.player.vy = 0; s.player.isJumping = false; onSurfaceRef.current = true; }
-        else if (s.player.y <= 40) { s.player.y = 40; s.player.vy = 0; s.player.isJumping = false; onSurfaceRef.current = true; }
+        else if (s.player.y <= 0) { s.player.y = 0; s.player.vy = 0; s.player.isJumping = false; onSurfaceRef.current = true; }
 
         const phX = s.player.x + 4, phY = s.player.y + 4, phW = PLAYER_SIZE - 8, phH = PLAYER_SIZE - 8;
-
-        for (const obj of level.objects) {
-          if (Math.abs(s.player.x - obj.x) > 400) continue;
+        
+        // Optimised Collision Detection using Spatial Index
+        collisionBufferRef.current = [];
+        const pChunk = Math.floor(s.player.x / CHUNK_SIZE);
+        // We gather objects from player's chunk and adjacent ones
+        for(let c = pChunk - 1; c <= pChunk + 2; c++) {
+            const chunk = chunksRef.current.get(c);
+            if(chunk) {
+                // Manually pushing is faster than spread for very large arrays, 
+                // but for chunk sizes it's negligible. Spread is cleaner.
+                for (let k = 0; k < chunk.length; k++) collisionBufferRef.current.push(chunk[k]);
+            }
+        }
+        
+        for (const obj of collisionBufferRef.current) {
+          // Additional bounds check still useful for diagonal objects or edges
+          // but spatial partition does heavy lifting.
 
           if (obj.type === ObjectType.SPIKE) {
             const shrink = 8;
@@ -446,12 +487,20 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
             const x3 = obj.x + BLOCK_SIZE - shrink, y3 = obj.y + BLOCK_SIZE - 2;
             const corners = [[phX, phY], [phX + phW, phY], [phX, phY + phH], [phX + phW, phY + phH]];
             if (corners.some(([cx, cy]) => pointInTriangle(cx, cy, x1, y1, x2, y2, x3, y3))) {
-              s.player.isDead = true; triggerShake(22, false); playSound('death'); setTimeout(() => onGameOver(coinsCount), 800); break;
+              s.player.isDead = true; 
+              triggerShake(22, false); 
+              playSound('death'); 
+              setTimeout(() => onGameOver(), 800); 
+              break;
             }
           } else if (obj.type === ObjectType.BLOCK) {
             if (s.player.x < obj.x + BLOCK_SIZE && s.player.x + PLAYER_SIZE > obj.x && s.player.y < obj.y + BLOCK_SIZE && s.player.y + PLAYER_SIZE > obj.y) {
               if (s.player.mode === 'WAVE') { 
-                s.player.isDead = true; triggerShake(22, false); playSound('death'); setTimeout(() => onGameOver(coinsCount), 800); break; 
+                s.player.isDead = true; 
+                triggerShake(22, false); 
+                playSound('death'); 
+                setTimeout(() => onGameOver(), 800); 
+                break; 
               }
               const tolerance = 12;
               const wasAbove = (internalPrevY + PLAYER_SIZE) <= obj.y + tolerance; 
@@ -461,7 +510,11 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
               } else if (wasBelow && s.player.vy * s.player.gravityDir >= 0 && s.player.gravityDir === -1) {
                 s.player.y = obj.y + BLOCK_SIZE; s.player.vy = 0; s.player.isJumping = false; onSurfaceRef.current = true;
               } else {
-                s.player.isDead = true; triggerShake(22, false); playSound('death'); setTimeout(() => onGameOver(coinsCount), 800); break;
+                s.player.isDead = true; 
+                triggerShake(22, false); 
+                playSound('death'); 
+                setTimeout(() => onGameOver(), 800); 
+                break;
               }
             }
           } else if (obj.type.startsWith('PORTAL_')) {
@@ -494,15 +547,6 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
                      }
                   }
               }
-          } else if (obj.type === ObjectType.COIN) {
-              if (!collectedCoins.current.has(obj.id)) {
-                const cCenterX = obj.x + BLOCK_SIZE / 2, cCenterY = obj.y + BLOCK_SIZE / 2;
-                const closestX = Math.max(phX, Math.min(cCenterX, phX + phW)), closestY = Math.max(phY, Math.min(cCenterY, phY + phH));
-                if (Math.sqrt((cCenterX - closestX) ** 2 + (cCenterY - closestY) ** 2) < 20) {
-                  collectedCoins.current.add(obj.id); setCoinsCount(prev => prev + 1);
-                  playSound('collect'); triggerShake(4, true); coinAnimsRef.current.push({ x: cCenterX, y: cCenterY, life: 1.0 });
-                }
-              }
           }
         }
       }
@@ -520,7 +564,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
       trailRef.current.unshift({ x: s.player.x, y: s.player.y, rotation: s.player.rotation, mode: s.player.mode });
       if (trailRef.current.length > TRAIL_LENGTH) trailRef.current.pop();
 
-      if (s.player.x > winX) onWin(coinsCount);
+      if (s.player.x > winX) onWin();
     };
 
     const drawPlayer = (ctx: CanvasRenderingContext2D, x: number, y: number, rot: number, mode: PlayerMode, alpha: number, color: string) => {
@@ -634,7 +678,6 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
 
       portalAnimsRef.current.forEach(anim => {
           const progress = 1 - anim.life;
-          // Scale shockwave radius by game speed
           const speedFactor = settings.speed / 5;
           const radius = progress * (160 * speedFactor);
           ctx.save();
@@ -646,7 +689,6 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
           ctx.arc(anim.x, anim.y, radius, 0, Math.PI * 2);
           ctx.stroke();
           
-          // Secondary ripple
           if (progress > 0.2) {
               ctx.beginPath();
               ctx.strokeStyle = `hsla(${anim.hue}, 100%, 70%, ${anim.life * 0.5})`;
@@ -656,43 +698,36 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
           ctx.restore();
       });
 
-      coinAnimsRef.current.forEach(anim => {
-        ctx.save(); ctx.globalAlpha = anim.life; ctx.fillStyle = '#ffd700'; ctx.font = 'bold 16px Orbitron'; ctx.shadowBlur = 10; ctx.shadowColor = '#ffd700'; ctx.fillText('+1', anim.x - 10, anim.y); ctx.restore();
-      });
+      // Render Optimisation using Spatial Index
+      drawBufferRef.current = [];
+      const startC = Math.floor((s.cameraX - 100) / CHUNK_SIZE);
+      const endC = Math.floor((s.cameraX + GAME_WIDTH + 100) / CHUNK_SIZE);
 
-      level.objects.forEach(obj => {
-        if (obj.x < s.cameraX - 100 || obj.x > s.cameraX + GAME_WIDTH + 100) return;
+      for(let c = startC; c <= endC; c++) {
+          const objs = chunksRef.current.get(c);
+          if(objs) for(let k=0; k<objs.length; k++) drawBufferRef.current.push(objs[k]);
+      }
+      // Sort visible objects by z-index for correct layering
+      drawBufferRef.current.sort((a, b) => (a.z || 0) - (b.z || 0));
+
+      drawBufferRef.current.forEach(obj => {
+        // Redundant X check removed as partitioning handles visibility
         if (obj.type === ObjectType.BLOCK) {
           ctx.fillStyle = 'rgba(26, 26, 26, 0.8)'; ctx.strokeStyle = settings.primaryColor; ctx.lineWidth = 1; ctx.fillRect(obj.x, obj.y, BLOCK_SIZE, BLOCK_SIZE); ctx.strokeRect(obj.x, obj.y, BLOCK_SIZE, BLOCK_SIZE);
         } else if (obj.type === ObjectType.SPIKE) {
           ctx.fillStyle = '#ff3333'; ctx.beginPath(); ctx.moveTo(obj.x+6, obj.y+BLOCK_SIZE-2); ctx.lineTo(obj.x+BLOCK_SIZE/2, obj.y+6); ctx.lineTo(obj.x+BLOCK_SIZE-6, obj.y+BLOCK_SIZE-2); ctx.fill(); ctx.strokeStyle = 'rgba(255,255,255,0.5)'; ctx.lineWidth = 1; ctx.stroke();
-        } else if (obj.type === ObjectType.COIN) {
-            if (!collectedCoins.current.has(obj.id)) {
-              ctx.save();
-              const floatY = Math.sin(s.frame * 0.1) * 4; const rotateAmt = s.frame * 0.05;
-              ctx.translate(obj.x + BLOCK_SIZE/2, obj.y + BLOCK_SIZE/2 + floatY); ctx.rotate(rotateAmt);
-              ctx.shadowBlur = 15; ctx.shadowColor = '#ffd700'; ctx.fillStyle = '#ffd700';
-              ctx.beginPath(); ctx.arc(0, 0, 14, 0, Math.PI * 2); ctx.fill();
-              ctx.fillStyle = '#fff700'; ctx.beginPath(); ctx.arc(0, 0, 10, 0, Math.PI * 2); ctx.fill();
-              ctx.fillStyle = '#ffd700'; ctx.font = 'bold 12px Orbitron'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('P', 0, 0);
-              ctx.restore();
-            }
         } else if (obj.type.startsWith('PORTAL_')) {
             ctx.save();
             let hue = getPortalHue(obj.type);
-            // Pulse scales with game speed
             const speedPulse = (settings.speed / 5);
             const animFactor = s.frame * 0.08 * speedPulse;
             const p = Math.sin(animFactor);
-            const pCos = Math.cos(animFactor * 1.5);
             
             ctx.translate(obj.x + BLOCK_SIZE/2, obj.y + BLOCK_SIZE/2);
             
-            // Outer Glow Aura
             ctx.shadowBlur = (20 + p * 12) * speedPulse;
             ctx.shadowColor = `hsl(${hue}, 100%, 50%)`;
             
-            // Energy Rings (Multi-layered swirl)
             for (let i = 0; i < 3; i++) {
                 ctx.save();
                 ctx.rotate(animFactor * (i + 1) * 0.2);
@@ -705,24 +740,21 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
                 ctx.restore();
             }
 
-            // Main Frame
             ctx.lineWidth = (4 + p * 2) * speedPulse;
             ctx.strokeStyle = `hsl(${hue}, 100%, 50%)`;
             ctx.beginPath();
             ctx.ellipse(0, 0, 15 + p * 4, 45 + p * 2, 0, 0, Math.PI * 2);
             ctx.stroke();
 
-            // Internal Energy Particles
             ctx.fillStyle = `hsla(${hue}, 100%, 70%, 0.4)`;
             for (let i = 0; i < 4; i++) {
                 const particleY = ((s.frame * 2 + i * 30) % 80) - 40;
                 const particleX = Math.sin(s.frame * 0.2 + i) * 8;
-                const size = 1 + Math.sin(s.frame * 0.1 + i) * 1.5;
+                const size = Math.max(0, 1 + Math.sin(s.frame * 0.1 + i) * 1.5);
                 ctx.beginPath();
                 ctx.arc(particleX, particleY, size * speedPulse, 0, Math.PI * 2);
                 ctx.fill();
             }
-            
             ctx.restore();
         }
       });
@@ -735,7 +767,6 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
       }
       ctx.restore();
 
-      // Screen-wide Portal Flash overlay
       if (portalFlashRef.current) {
         ctx.save();
         ctx.globalAlpha = portalFlashRef.current.life * 0.15;
@@ -749,7 +780,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
     const loop = () => { update(); draw(); frameId.current = requestAnimationFrame(loop); };
     loop();
     return () => { if (frameId.current) cancelAnimationFrame(frameId.current); };
-  }, [level, onGameOver, onWin, isPausedExternal, isLocalPaused, triggerInteraction, settings, coinsCount, countdown, triggerShake]);
+  }, [level, onGameOver, onWin, isPausedExternal, isLocalPaused, triggerInteraction, settings, countdown, triggerShake]);
 
   return (
     <div className="relative w-full h-full flex flex-col items-center justify-center bg-black overflow-hidden select-none">
@@ -761,10 +792,6 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
             <div className="glass px-4 py-2 rounded-2xl flex items-center gap-3">
                 <div className="w-3 h-3 rounded-full animate-pulse" style={{ backgroundColor: settings.primaryColor }} />
                 <span className="text-white font-orbitron text-xs font-bold tracking-[0.2em]">{level.name.toUpperCase()}</span>
-            </div>
-            <div className={`glass px-4 py-2 rounded-2xl flex items-center gap-3 transition-all duration-500 ${coinsCount > 0 ? 'scale-100 opacity-100' : 'scale-90 opacity-40'}`}>
-                <div className="w-4 h-4 rounded-full bg-[#ffd700] shadow-[0_0_10px_#ffd700]" />
-                <span className="text-white font-orbitron text-xs font-black">{coinsCount} <span className="text-white/30 font-normal">/ {totalCoinsInLevel}</span></span>
             </div>
         </div>
         <div className="flex flex-col items-end gap-1">
